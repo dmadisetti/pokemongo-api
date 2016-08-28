@@ -293,19 +293,19 @@ class Trainer(object):
 
     # Set an egg to an incubator
     def setEggs(self):
-        logging.info("Placing eggs in incubators.")
+        logging.info("Placing eggs in incubators...")
         inventory = self.session.inventory
 
         # get empty incubators
         incubators = filter(lambda x: x.pokemon_id == 0, inventory.incubators)
-        logging.info(incubators)
+        logging.debug(incubators)
 
         # get available eggs sorted by distance (i.e. favor 10 km over 5 km)
         eggs = sorted(
             filter(lambda x: not x.egg_incubator_id, inventory.eggs),
             key=lambda x: x.egg_km_walked_target - x.egg_km_walked_start,
             reverse=True)
-        logging.info(eggs)
+        logging.debug(eggs)
 
         # assign the best eggs to empty incubators
         for i in range(min(len(incubators), len(eggs))):

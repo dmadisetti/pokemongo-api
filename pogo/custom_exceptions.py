@@ -16,3 +16,7 @@ class PogoInventoryException(GeneralPogoException):
 
 class PogoRateException(GeneralPogoException):
     """Requests made too quickly"""
+
+
+class PogoBanException(GeneralPogoException):
+    """Possible Ban. Woops"""

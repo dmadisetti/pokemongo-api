@@ -23,7 +23,8 @@ from pogo.custom_exceptions import (
     PogoServerException,
     PogoResponseException,
     PogoInventoryException,
-    PogoRateException
+    PogoRateException,
+    PogoBanException
 )
 from google.protobuf.message import DecodeError
 
@@ -53,6 +54,7 @@ ERROR_RETURN = 'Error parsing response. Malformed response'
 ERROR_PROTO = 'Expected response not returned'
 ERROR_INVENTORY = 'Please initialize Inventory before access.'
 ERROR_RATE = 'Request frequency exceeds rate limit.'
+ERROR_BAN = 'Possible ban or bad parameters passed in'
 
 # Notices
 NO_ENCRYPTION_NOTICE = (
@@ -63,6 +65,12 @@ NO_ENCRYPTION_NOTICE = (
     "demo.py, specify the -e flag e.g. -e'encrpyt.dll'"
 )
 NO_LOCATION_NOTICE = "Limited functionality. No location provided"
+BAN_NOTICE = (
+    "Woops. This account may have been banned from PokemonGo\n"
+    "We're sorry this happened, but when you violate the TOS\n"
+    "it's a risk you run. You have our sympathy, just remember\n"
+    "we are not liable.\n"
+)
 
 
 class PogoSessionBare(object):
@@ -87,7 +95,7 @@ class PogoSessionBare(object):
         self._start = getMs()
         self._authTicket = None
         self._session = self._authSession.requestSession
-        self._endpoint = self.formatEndpoint(self.createApiEndpoint())
+        self.createApiEndpoint()
 
         if self.encryptLib is None:
             logging.warning(NO_ENCRYPTION_NOTICE)
@@ -169,19 +177,31 @@ class PogoSessionBare(object):
         RPC_ID = RPC_ID + 1
         return RPC_ID
 
-    def createApiEndpoint(self):
-        payload = []
-        msg = Request.Request(
+    # Get profile. This is the inital request the app starts with.
+    def getProfile(self, initial=False):
+        # Create profile request
+        payload = [Request.Request(
             request_type=RequestType.GET_PLAYER
-        )
-        payload.append(msg)
-        req = self.wrapInRequest(payload)
-        res = self.request(req, API_URL)
-        if res is None:
-            logging.critical('Servers seem to be busy. Exiting.')
-            raise Exception(ERROR_CONNECT)
+        )]
 
-        return res.api_url
+        # Send
+        if initial:
+            res = self.wrapAndRequest(payload, defaults=False, url=API_URL)
+        else:
+            res = self.wrapAndRequest(payload)
+
+        # Parse
+        self._state.profile.ParseFromString(res.returns[0])
+
+        # Return everything
+        return self._state.profile
+
+    def createApiEndpoint(self):
+        try:
+            self.getProfile(initial=True)
+        except PogoBanException as e:
+            logging.warning(BAN_NOTICE)
+            raise e
 
     def setCoordinates(self, latitude, longitude):
         self.location.setCoordinates(latitude, longitude)
@@ -230,7 +250,7 @@ class PogoSessionBare(object):
                 timestamp=getMs(),
                 timestamp_since_start=getMs() - self._start,
                 request_hash=hashRequests(self.authTicket, payload),
-                unknown25 = -8537042734809897855
+                unknown25=-8537042734809897855
             )
 
             signature = hashSignature(proto, self.encryptLib)
@@ -268,6 +288,10 @@ class PogoSessionBare(object):
         res = ResponseEnvelope.ResponseEnvelope()
         res.ParseFromString(rawResponse.content)
 
+        # Set Api Url if provided
+        if res.api_url:
+            self._endpoint = self.formatEndpoint(res.api_url)
+
         # Update Auth ticket if it exists
         if res.auth_ticket.start:
             self._authTicket = res.auth_ticket
@@ -284,17 +308,17 @@ class PogoSessionBare(object):
             logging.error(e)
             raise PogoServerException(ERROR_SERVER)
 
-    def wrapAndRequest(self, payload, defaults=True):
-        res = self.request(self.wrapInRequest(payload, defaults=defaults))
+    def wrapAndRequest(self, payload, defaults=True, url=None):
+        res = self.request(self.wrapInRequest(payload, defaults=defaults), url=url)
         if res is None:
             logging.critical(res)
             logging.critical('Servers seem to be busy. Exiting.')
             raise Exception(ERROR_CONNECT)
 
         # Try again.
-        if res.status_code == 53:
-            self.endpoint = self.formatEndpoint(res.api_url)
-            logging.info('Using new endpoint...')
+        print(len(res.returns))
+        if res.status_code == 53 and len(res.returns) == 0:
+            logging.info('Trying again with new endpoint...')
             # Does python somehow fanagle tail recursion optimization?
             # Hopefully won't result in a stack overflow
             return self.wrapAndRequest(payload, defaults=defaults)
@@ -302,6 +326,10 @@ class PogoSessionBare(object):
         # Rate Limited
         if res.status_code == 52:
             raise PogoRateException(ERROR_RATE)
+
+        # Possible Ban... Or bad parameters
+        if res.status_code == 3:
+            raise PogoBanException(ERROR_BAN)
 
         if defaults:
             self.parseDefault(res)

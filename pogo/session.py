@@ -33,22 +33,6 @@ class PogoSession(PogoSessionBare):
     """Session class with more robust calls"""
 
     # Core api calls
-    # Get profile
-    def getProfile(self):
-        # Create profile request
-        payload = [Request.Request(
-            request_type=RequestType.GET_PLAYER
-        )]
-
-        # Send
-        res = self.wrapAndRequest(payload)
-
-        # Parse
-        self._state.profile.ParseFromString(res.returns[0])
-
-        # Return everything
-        return self._state.profile
-
     # Hooks for those bundled in default
     def getEggs(self):
         self.getProfile()

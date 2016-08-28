@@ -48,7 +48,7 @@ Our current implementaion covers most of the basics of gameplay. The following m
 
 
 | Description                                      | function      |
-| ------------------                               | -------------:|
+| ------------------                               |:------------- |
 | Get Profile (Avatar, team etc..)                 | getProfile() |
 | Get Eggs                                         | getEggs() |
 | Get Inventory                                    | getInventory() |

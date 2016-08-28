@@ -55,6 +55,7 @@ if __name__ == '__main__':
     if session:
         trainer = Trainer(auth_session, session)
 
+        print ("Yooooooooo")
         # Wait for a second to prevent GeneralPogoException
         # Goodnight moon. Goodnight moon.
         time.sleep(1)
